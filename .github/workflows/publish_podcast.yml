@@ -1,0 +1,76 @@
+name: Publish Daily Podcast
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Runs daily at 05:00 UTC ≈ 07:00 Europe/Madrid
+  workflow_dispatch:       # Allow manual runs
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Update RSS feed if WAV exists
+        run: |
+          python <<'PYCODE'
+          import datetime, xml.etree.ElementTree as ET, requests, sys
+
+          # --- Configuration ---
+          rss_path = "podcast/rss.xml"
+          bucket_url_prefix = "https://storage.googleapis.com/nba_daily_summary_podcast_audios/"
+          today = datetime.date.today().strftime("%Y-%m-%d")
+
+          audio_filename = f"nba_daily_summary_podcast_{today}.wav"
+          audio_url = f"{bucket_url_prefix}{audio_filename}"
+
+          # --- Check if today's file exists in GCS ---
+          print(f"Checking if {audio_url} exists...")
+          response = requests.head(audio_url)
+          if response.status_code != 200:
+              print(f"❌ File not found (HTTP {response.status_code}), skipping.")
+              sys.exit(0)
+          print("✅ File exists, proceeding to update RSS.")
+
+          # --- Parse RSS ---
+          tree = ET.parse(rss_path)
+          channel = tree.find("channel")
+
+          # --- Avoid duplicates ---
+          existing_titles = [item.findtext("title") for item in channel.findall("item")]
+          if any(today in (t or "") for t in existing_titles):
+              print(f"ℹ️ Episode for {today} already exists, skipping.")
+              sys.exit(0)
+
+          # --- Build new item ---
+          pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+          item = ET.Element("item")
+          ET.SubElement(item, "title").text = f"NBA Daily Summary — {today}"
+          ET.SubElement(item, "description").text = f"Automated summary for {today}."
+          ET.SubElement(item, "pubDate").text = pub_date
+          ET.SubElement(item, "guid").text = audio_url
+          ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
+
+          # --- Insert item at top ---
+          channel.insert(0, item)
+
+          # --- Write updated RSS ---
+          tree.write(rss_path, encoding="UTF-8", xml_declaration=True)
+          print(f"✅ Added episode for {today}: {audio_url}")
+          PYCODE
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add podcast/rss.xml
+          git commit -m "Add new episode $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
