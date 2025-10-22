@@ -1,13 +1,11 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0"
-     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
-     xmlns:atom="http://www.w3.org/2005/Atom">
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
   <channel>
     <title>NBA Daily Summary Podcast</title>
     <link>https://DamiMartinez.github.io/nba-daily-summary-podcast/</link>
     <language>en-us</language>
     <description>Automatically generated daily NBA summaries.</description>
-    <atom:link href="https://DamiMartinez.github.io/nba-daily-summary-podcast/podcast/rss.xml" rel="self" type="application/rss+xml"/>
-    <!-- items will be added automatically -->
-  </channel>
+    <atom:link href="https://DamiMartinez.github.io/nba-daily-summary-podcast/podcast/rss.xml" rel="self" type="application/rss+xml" />
+    
+  <item><title>NBA Daily Summary — 2025-10-22</title><description>Automated summary for 2025-10-22.</description><pubDate>Wed, 22 Oct 2025 17:22:06 GMT</pubDate><guid>https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav</guid><enclosure url="https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav" length="0" type="audio/wav" /></item></channel>
 </rss>
