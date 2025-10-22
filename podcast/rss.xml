@@ -29,13 +29,13 @@
     <!-- First episode -->
     <item>
       <title>NBA Daily Summary — 2025-10-22</title>
-      <description><![CDATA[Automated summary for 2025-10-22.]]></description>
+      <description><![CDATA[NBA games recap for 2025-10-22.]]></description>
       <pubDate>Wed, 22 Oct 2025 17:22:06 GMT</pubDate>
       <guid>https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav</guid>
       <enclosure url="https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav" length="0" type="audio/wav"/>
       
       <!-- Spotify / iTunes item tags -->
-      <itunes:summary><![CDATA[Automated summary for 2025-10-22]]></itunes:summary>
+      <itunes:summary><![CDATA[NBA games recap for 2025-10-22]]></itunes:summary>
       <itunes:explicit>false</itunes:explicit>
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:duration>00:02:12</itunes:duration> <!-- replace with actual duration if known -->
