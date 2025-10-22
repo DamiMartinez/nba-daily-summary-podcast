@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # <-- ensures GITHUB_TOKEN is used for git push
+          persist-credentials: true  # ensures GITHUB_TOKEN is used for git push
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,9 +35,12 @@ jobs:
           rss_path = "podcast/rss.xml"
           bucket_url_prefix = "https://storage.googleapis.com/nba_daily_summary_podcast_audios/"
           today = datetime.date.today().strftime("%Y-%m-%d")
-
           audio_filename = f"nba_daily_summary_podcast_{today}.wav"
           audio_url = f"{bucket_url_prefix}{audio_filename}"
+
+          # Spotify owner info
+          itunes_owner_name = "Damian Martínez Carmona"
+          itunes_owner_email = "damian.martinez.carmona@gmail.com"  # <-- replace with your email
 
           # --- Check if today's file exists in GCS ---
           print(f"Checking if {audio_url} exists...")
@@ -47,12 +50,24 @@ jobs:
               sys.exit(0)
           print("✅ File exists, proceeding to update RSS.")
 
-          # --- Register atom namespace ---
+          # --- Register namespaces ---
           ET.register_namespace('atom', "http://www.w3.org/2005/Atom")
+          ET.register_namespace('itunes', "http://www.itunes.com/dtds/podcast-1.0.dtd")
 
           # --- Parse RSS ---
           tree = ET.parse(rss_path)
           channel = tree.find("channel")
+
+          # --- Ensure itunes:owner exists ---
+          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}owner") is None:
+              itunes_owner = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
+              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name").text = itunes_owner_name
+              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text = itunes_owner_email
+
+          # --- Ensure itunes:category exists ---
+          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}category") is None:
+              itunes_category = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text="Sports")
+              ET.SubElement(itunes_category, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text="Basketball")
 
           # --- Avoid duplicates ---
           existing_titles = [item.findtext("title") for item in channel.findall("item")]
@@ -62,7 +77,6 @@ jobs:
 
           # --- Build new item ---
           pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-
           item = ET.Element("item")
           ET.SubElement(item, "title").text = f"NBA Daily Summary — {today}"
           ET.SubElement(item, "description").text = f"Automated summary for {today}."
@@ -70,8 +84,13 @@ jobs:
           ET.SubElement(item, "guid").text = audio_url
           ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
 
-          # --- Insert new item at top (after channel metadata) ---
-          metadata_tags = ['title', 'link', 'language', 'description', '{http://www.w3.org/2005/Atom}link']
+          # --- Insert new item at the top (after channel metadata, before existing items) ---
+          metadata_tags = [
+              'title', 'link', 'language', 'description',
+              '{http://www.w3.org/2005/Atom}link',
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}owner',
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}category'
+          ]
           insert_index = max([i for i, child in enumerate(channel) if child.tag in metadata_tags]) + 1
           channel.insert(insert_index, item)
 
