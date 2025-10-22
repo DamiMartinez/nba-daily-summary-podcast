@@ -3,7 +3,7 @@ name: Publish Daily Podcast
 on:
   schedule:
     - cron: '0 5 * * *'  # 05:00 UTC ≈ 07:00 Europe/Madrid
-  workflow_dispatch:       # Allows manual runs
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true  # ensures GITHUB_TOKEN is used for git push
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,6 +30,8 @@ jobs:
           import xml.etree.ElementTree as ET
           import requests
           import sys
+          import wave
+          import contextlib
 
           # --- Configuration ---
           rss_path = "podcast/rss.xml"
@@ -38,11 +40,15 @@ jobs:
           audio_filename = f"nba_daily_summary_podcast_{today}.wav"
           audio_url = f"{bucket_url_prefix}{audio_filename}"
 
-          # Spotify owner info
-          itunes_owner_name = "Damian Martínez Carmona"
-          itunes_owner_email = "damian.martinez.carmona@gmail.com"  # <-- replace with your email
+          # Podcast metadata
+          podcast_name = "NBA Daily Summary"
+          author_name = "Damian Martínez Carmona"
+          author_email = "damian.martinez.carmona@gmail.com"
+          podcast_image = "https://damimartinez.github.io/nba-daily-summary-podcast/podcast/NBA_daily_summary_cover.png"
+          podcast_category = "Sports"
+          podcast_subcategory = "Basketball"
 
-          # --- Check if today's file exists in GCS ---
+          # --- Check if today's file exists ---
           print(f"Checking if {audio_url} exists...")
           response = requests.head(audio_url)
           if response.status_code != 200:
@@ -50,24 +56,51 @@ jobs:
               sys.exit(0)
           print("✅ File exists, proceeding to update RSS.")
 
+          # --- Calculate WAV duration in HH:MM:SS ---
+          # Download the WAV file temporarily to get duration
+          import tempfile, urllib.request
+          tmpfile = tempfile.NamedTemporaryFile(delete=False)
+          urllib.request.urlretrieve(audio_url, tmpfile.name)
+          with contextlib.closing(wave.open(tmpfile.name,'r')) as wf:
+              frames = wf.getnframes()
+              rate = wf.getframerate()
+              duration_sec = int(frames / float(rate))
+              hours = duration_sec // 3600
+              minutes = (duration_sec % 3600) // 60
+              seconds = duration_sec % 60
+              duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+          print(f"Duration of WAV: {duration_str}")
+
           # --- Register namespaces ---
           ET.register_namespace('atom', "http://www.w3.org/2005/Atom")
           ET.register_namespace('itunes', "http://www.itunes.com/dtds/podcast-1.0.dtd")
+          ET.register_namespace('dc', "http://purl.org/dc/elements/1.1/")
 
           # --- Parse RSS ---
           tree = ET.parse(rss_path)
           channel = tree.find("channel")
 
-          # --- Ensure itunes:owner exists ---
+          # --- Ensure channel-level tags ---
+          if channel.find("author") is None:
+              ET.SubElement(channel, "author").text = author_name
+          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}author") is None:
+              ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}author").text = author_name
+          if channel.find("{http://purl.org/dc/elements/1.1/}creator") is None:
+              ET.SubElement(channel, "{http://purl.org/dc/elements/1.1/}creator").text = author_name
+          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}image") is None:
+              ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}image", href=podcast_image)
+          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit") is None:
+              ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
+
           if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}owner") is None:
               itunes_owner = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}owner")
-              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name").text = itunes_owner_name
-              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text = itunes_owner_email
+              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}name").text = author_name
+              ET.SubElement(itunes_owner, "{http://www.itunes.com/dtds/podcast-1.0.dtd}email").text = author_email
 
-          # --- Ensure itunes:category exists ---
           if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}category") is None:
-              itunes_category = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text="Sports")
-              ET.SubElement(itunes_category, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text="Basketball")
+              itunes_category = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text=podcast_category)
+              ET.SubElement(itunes_category, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text=podcast_subcategory)
 
           # --- Avoid duplicates ---
           existing_titles = [item.findtext("title") for item in channel.findall("item")]
@@ -78,25 +111,34 @@ jobs:
           # --- Build new item ---
           pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
           item = ET.Element("item")
-          ET.SubElement(item, "title").text = f"NBA Daily Summary — {today}"
+          ET.SubElement(item, "title").text = f"{podcast_name} — {today}"
           ET.SubElement(item, "description").text = f"Automated summary for {today}."
           ET.SubElement(item, "pubDate").text = pub_date
           ET.SubElement(item, "guid").text = audio_url
           ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
 
-          # --- Insert new item at the top (after channel metadata, before existing items) ---
+          # --- Spotify-specific item tags ---
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = f"Automated summary for {today}"
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}episodeType").text = "full"
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration").text = duration_str
+
+          # --- Insert new item at the top ---
           metadata_tags = [
               'title', 'link', 'language', 'description',
               '{http://www.w3.org/2005/Atom}link',
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}author',
               '{http://www.itunes.com/dtds/podcast-1.0.dtd}owner',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}category'
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}category',
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}image',
+              '{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit'
           ]
           insert_index = max([i for i, child in enumerate(channel) if child.tag in metadata_tags]) + 1
           channel.insert(insert_index, item)
 
-          # --- Write updated RSS ---
+          # --- Write RSS ---
           tree.write(rss_path, encoding="UTF-8", xml_declaration=True)
-          print(f"✅ Added episode for {today}: {audio_url}")
+          print(f"✅ Added episode for {today}: {audio_url} with duration {duration_str}")
           PYCODE
 
       - name: Commit and push changes

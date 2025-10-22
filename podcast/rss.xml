@@ -1,6 +1,7 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:atom="http://www.w3.org/2005/Atom"
      xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
      version="2.0">
   <channel>
     <title>NBA Daily Summary</title>
@@ -9,24 +10,35 @@
     <description>Get a complete recap of NBA games every day, including the key stats and highlights.</description>
     <atom:link href="https://DamiMartinez.github.io/nba-daily-summary-podcast/podcast/rss.xml" rel="self" type="application/rss+xml"/>
     
-    <!-- Spotify / iTunes owner info -->
+    <!-- Required by Spotify / iTunes -->
+    <author><![CDATA[Damian Martínez Carmona]]></author>
+    <itunes:author>Damian Martínez Carmona</itunes:author>
+    <dc:creator><![CDATA[Damian Martínez Carmona]]></dc:creator>
+    <itunes:image href="https://damimartinez.github.io/nba-daily-summary-podcast/podcast/NBA_daily_summary_cover.png"/>
+    <itunes:explicit>false</itunes:explicit>
+
     <itunes:owner>
-      <itunes:name>Damian Martinez Carmona</itunes:name>
+      <itunes:name>Damian Martínez Carmona</itunes:name>
       <itunes:email>damian.martinez.carmona@gmail.com</itunes:email>
     </itunes:owner>
 
-    <!-- Podcast category -->
     <itunes:category text="Sports">
       <itunes:category text="Basketball"/>
     </itunes:category>
 
-    <!-- Latest episode -->
+    <!-- First episode -->
     <item>
       <title>NBA Daily Summary — 2025-10-22</title>
-      <description>Automated summary for 2025-10-22.</description>
+      <description><![CDATA[Automated summary for 2025-10-22.]]></description>
       <pubDate>Wed, 22 Oct 2025 17:22:06 GMT</pubDate>
       <guid>https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav</guid>
       <enclosure url="https://storage.googleapis.com/nba_daily_summary_podcast_audios/nba_daily_summary_podcast_2025-10-22.wav" length="0" type="audio/wav"/>
+      
+      <!-- Spotify / iTunes item tags -->
+      <itunes:summary><![CDATA[Automated summary for 2025-10-22]]></itunes:summary>
+      <itunes:explicit>false</itunes:explicit>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:duration>00:02:12</itunes:duration> <!-- replace with actual duration if known -->
     </item>
 
   </channel>
