@@ -112,13 +112,13 @@ jobs:
           pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
           item = ET.Element("item")
           ET.SubElement(item, "title").text = f"{podcast_name} — {today}"
-          ET.SubElement(item, "description").text = f"Automated summary for {today}."
+          ET.SubElement(item, "description").text = f"NBA games recap for {today}."
           ET.SubElement(item, "pubDate").text = pub_date
           ET.SubElement(item, "guid").text = audio_url
           ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
 
           # --- Spotify-specific item tags ---
-          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = f"Automated summary for {today}"
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = f"NBA games recap for {today}"
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}episodeType").text = "full"
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration").text = duration_str
