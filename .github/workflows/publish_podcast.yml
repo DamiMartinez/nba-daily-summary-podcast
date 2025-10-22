@@ -26,7 +26,10 @@ jobs:
       - name: Update RSS feed if WAV exists
         run: |
           python <<'PYCODE'
-          import datetime, xml.etree.ElementTree as ET, requests, sys
+          import datetime
+          import xml.etree.ElementTree as ET
+          import requests
+          import sys
 
           # --- Configuration ---
           rss_path = "podcast/rss.xml"
@@ -43,6 +46,9 @@ jobs:
               print(f"❌ File not found (HTTP {response.status_code}), skipping.")
               sys.exit(0)
           print("✅ File exists, proceeding to update RSS.")
+
+          # --- Register atom namespace ---
+          ET.register_namespace('atom', "http://www.w3.org/2005/Atom")
 
           # --- Parse RSS ---
           tree = ET.parse(rss_path)
@@ -64,8 +70,10 @@ jobs:
           ET.SubElement(item, "guid").text = audio_url
           ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
 
-          # --- Insert item at top ---
-          channel.insert(0, item)
+          # --- Insert new item at top (after channel metadata) ---
+          metadata_tags = ['title', 'link', 'language', 'description', '{http://www.w3.org/2005/Atom}link']
+          insert_index = max([i for i, child in enumerate(channel) if child.tag in metadata_tags]) + 1
+          channel.insert(insert_index, item)
 
           # --- Write updated RSS ---
           tree.write(rss_path, encoding="UTF-8", xml_declaration=True)
