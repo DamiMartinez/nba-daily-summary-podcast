@@ -27,7 +27,14 @@ def wav_bytes():
 
 
 class FeedBuilderTests(unittest.TestCase):
-    def execute(self, payload, head_status=200, twice=False, initially_missing=False):
+    def execute(
+        self,
+        payload,
+        head_status=200,
+        twice=False,
+        initially_missing=False,
+        initial_feed=INITIAL_FEED,
+    ):
         head = MagicMock()
         head.status_code = head_status
         if head_status >= 400:
@@ -46,7 +53,7 @@ class FeedBuilderTests(unittest.TestCase):
                 os.chdir(temp)
                 Path("podcast").mkdir()
                 path = Path("podcast/rss.xml")
-                path.write_text(INITIAL_FEED)
+                path.write_text(initial_feed)
                 with patch.dict("sys.modules", {"requests": fake_requests}), patch.dict(
                     os.environ,
                     {
@@ -59,7 +66,7 @@ class FeedBuilderTests(unittest.TestCase):
                     try:
                         exec(compile(workflow_python(), "rss_workflow", "exec"), {})
                     except Exception:
-                        self.assertEqual(path.read_text(), INITIAL_FEED)
+                        self.assertEqual(path.read_text(), initial_feed)
                         raise
                     first = path.read_bytes()
                     if twice:
@@ -90,6 +97,18 @@ class FeedBuilderTests(unittest.TestCase):
         self.assertEqual(items[1].findtext("guid"), "previous")
         self.assertEqual(requests.head.call_args.kwargs["timeout"], (5, 30))
         self.assertEqual(requests.get.call_args.kwargs["timeout"], (5, 60))
+
+    def test_existing_artwork_updates_to_configured_cover(self):
+        feed = INITIAL_FEED.replace(
+            '<rss version="2.0">',
+            '<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">',
+        ).replace(
+            "<title>NBA</title>",
+            '<title>NBA</title><itunes:image href="https://example.com/old-cover.png" />',
+        )
+        root, _ = self.execute(wav_bytes(), initial_feed=feed)
+        image = root.find("./channel/" + ITUNES + "image")
+        self.assertTrue(image.get("href").endswith("/NBA_daily_summary_cover_v2.png"))
 
     def test_second_run_does_not_duplicate_or_rewrite(self):
         root, _ = self.execute(wav_bytes(), twice=True)

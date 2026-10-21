@@ -73,7 +73,7 @@ jobs:
           podcast_name = "NBA Daily Summary"
           author_name = "Damian Martínez Carmona"
           author_email = "damian.martinez.carmona@gmail.com"
-          podcast_image = "https://damimartinez.github.io/nba-daily-summary-podcast/podcast/NBA_daily_summary_cover.png"
+          podcast_image = "https://damimartinez.github.io/nba-daily-summary-podcast/podcast/NBA_daily_summary_cover_v2.png"
           podcast_category = "Sports"
           podcast_subcategory = "Basketball"
 
@@ -136,8 +136,10 @@ jobs:
               ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}author").text = author_name
           if channel.find("{http://purl.org/dc/elements/1.1/}creator") is None:
               ET.SubElement(channel, "{http://purl.org/dc/elements/1.1/}creator").text = author_name
-          if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}image") is None:
-              ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}image", href=podcast_image)
+          artwork = channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}image")
+          if artwork is None:
+              artwork = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}image")
+          artwork.set("href", podcast_image)
           if channel.find("{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit") is None:
               ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
 
