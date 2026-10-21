@@ -5,6 +5,14 @@ Public podcast RSS feed and cover artwork for the NBA Daily Summary.
 - Feed: https://damimartinez.github.io/nba-daily-summary-podcast/podcast/rss.xml
 - Audio producer: https://github.com/DamiMartinez/nba-agents
 
+## Artwork
+
+The current cover is [`podcast/NBA_daily_summary_cover_v2.png`](podcast/NBA_daily_summary_cover_v2.png),
+a 1400 × 1400 RGB PNG without transparency, prepared from the supplied NBA Daily
+Summary design. Both RSS and the publisher configuration use its versioned URL
+so podcast apps can detect the update. The prior image remains available for
+cached feeds. App artwork refresh times vary after deployment.
+
 ## Eastern Time policy
 
 All episode dates use **America/New_York**, including the audio filename selected
