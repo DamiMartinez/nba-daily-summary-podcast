@@ -2,31 +2,53 @@ name: Publish Daily Podcast
 
 on:
   schedule:
-    - cron: '0 9 * * *'  # 09:00 UTC ≈ 11:00 Europe/Madrid
+    # Start with the generator at 11:00 Madrid time and wait for its audio.
+    # Episode dates/times remain New York time; this zone is only for scheduling.
+    - cron: '0 11 * * *'
+      timezone: 'Europe/Madrid'
   workflow_dispatch:
+    inputs:
+      edition_date:
+        description: 'Eastern (New York) edition date YYYY-MM-DD (blank = today in New York)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nba-rss-publisher
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 100
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests==2.34.2
 
       - name: Update RSS feed if WAV exists
+        env:
+          EDITION_DATE: ${{ inputs.edition_date }}
         run: |
           python <<'PYCODE'
           import datetime
+          import os
+          import time
+          from email.utils import format_datetime
+          from zoneinfo import ZoneInfo
           import xml.etree.ElementTree as ET
           import requests
           import sys
@@ -36,7 +58,14 @@ jobs:
           # --- Configuration ---
           rss_path = "podcast/rss.xml"
           bucket_url_prefix = "https://storage.googleapis.com/nba_daily_summary_podcast_audios/"
-          today = datetime.date.today().strftime("%Y-%m-%d")
+          eastern = ZoneInfo("America/New_York")
+          requested_date = os.environ.get("EDITION_DATE", "").strip()
+          today = (
+              datetime.date.fromisoformat(requested_date)
+              if requested_date
+              else datetime.datetime.now(eastern).date()
+          ).isoformat()
+          print(f"Eastern edition date: {today} (America/New_York)")
           audio_filename = f"nba_daily_summary_podcast_{today}.wav"
           audio_url = f"{bucket_url_prefix}{audio_filename}"
 
@@ -50,25 +79,44 @@ jobs:
 
           # --- Check if today's file exists ---
           print(f"Checking if {audio_url} exists...")
-          response = requests.head(audio_url)
-          if response.status_code != 200:
-              print(f"❌ File not found (HTTP {response.status_code}), skipping.")
-              sys.exit(0)
+          # Both workflows start at 11:00 Madrid: wait for the producer instead
+          # of racing its upload or silently skipping today's episode.
+          wait_seconds = int(os.environ.get("AUDIO_WAIT_SECONDS", "5400"))
+          if not 0 <= wait_seconds <= 5400:
+              raise ValueError("AUDIO_WAIT_SECONDS must be between 0 and 5400")
+          deadline = time.monotonic() + wait_seconds
+          while True:
+              response = requests.head(audio_url, timeout=(5, 30), allow_redirects=True)
+              if response.status_code != 404:
+                  response.raise_for_status()
+                  break
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise RuntimeError("Audio not available before the 90-minute publication deadline")
+              print("Waiting for today's generated audio...")
+              time.sleep(min(60, remaining))
           print("✅ File exists, proceeding to update RSS.")
 
           # --- Calculate WAV duration in HH:MM:SS ---
-          # Download the WAV file temporarily to get duration
-          import tempfile, urllib.request
-          tmpfile = tempfile.NamedTemporaryFile(delete=False)
-          urllib.request.urlretrieve(audio_url, tmpfile.name)
-          with contextlib.closing(wave.open(tmpfile.name,'r')) as wf:
-              frames = wf.getnframes()
-              rate = wf.getframerate()
-              duration_sec = int(frames / float(rate))
-              hours = duration_sec // 3600
-              minutes = (duration_sec % 3600) // 60
-              seconds = duration_sec % 60
-              duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+          # Bound network reads and remove temporary audio on success or failure.
+          import tempfile
+          with tempfile.NamedTemporaryFile() as tmpfile:
+              with requests.get(audio_url, stream=True, timeout=(5, 60)) as download:
+                  download.raise_for_status()
+                  for chunk in download.iter_content(chunk_size=1024 * 1024):
+                      tmpfile.write(chunk)
+              audio_size = tmpfile.tell()
+              tmpfile.flush()
+              with contextlib.closing(wave.open(tmpfile.name, 'rb')) as wf:
+                  frames = wf.getnframes()
+                  rate = wf.getframerate()
+                  if frames <= 0 or rate <= 0:
+                      raise ValueError("Audio is empty or invalid")
+                  duration_sec = int(frames / float(rate))
+                  hours = duration_sec // 3600
+                  minutes = (duration_sec % 3600) // 60
+                  seconds = duration_sec % 60
+                  duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
           print(f"Duration of WAV: {duration_str}")
 
@@ -109,13 +157,13 @@ jobs:
               sys.exit(0)
 
           # --- Build new item ---
-          pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
+          pub_date = format_datetime(datetime.datetime.now(eastern))
           item = ET.Element("item")
           ET.SubElement(item, "title").text = f"{podcast_name} — {today}"
           ET.SubElement(item, "description").text = f"NBA games recap for {today}."
           ET.SubElement(item, "pubDate").text = pub_date
           ET.SubElement(item, "guid").text = audio_url
-          ET.SubElement(item, "enclosure", url=audio_url, length="0", type="audio/wav")
+          ET.SubElement(item, "enclosure", url=audio_url, length=str(audio_size), type="audio/wav")
 
           # --- Spotify-specific item tags ---
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = f"NBA games recap for {today}"
@@ -124,16 +172,12 @@ jobs:
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration").text = duration_str
 
           # --- Insert new item at the top ---
-          metadata_tags = [
-              'title', 'link', 'language', 'description',
-              '{http://www.w3.org/2005/Atom}link',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}author',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}owner',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}category',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}image',
-              '{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit'
-          ]
-          insert_index = max([i for i, child in enumerate(channel) if child.tag in metadata_tags]) + 1
+          # Newly added metadata may be appended after old items: always insert
+          # before the first existing episode, not after the last metadata tag.
+          insert_index = next(
+              (i for i, child in enumerate(channel) if child.tag == 'item'),
+              len(channel),
+          )
           channel.insert(insert_index, item)
 
           # --- Write RSS ---
@@ -141,10 +185,32 @@ jobs:
           print(f"✅ Added episode for {today}: {audio_url} with duration {duration_str}")
           PYCODE
 
+      - name: Install secret scanner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scanner_dir="$(mktemp -d "${RUNNER_TEMP}/gitleaks.XXXXXX")"
+          gh release download v8.30.1 --repo gitleaks/gitleaks \
+            --pattern 'gitleaks_8.30.1_linux_x64.tar.gz' \
+            --pattern 'gitleaks_8.30.1_checksums.txt' --dir "$scanner_dir"
+          (
+            cd "$scanner_dir"
+            sha256sum --ignore-missing --check gitleaks_8.30.1_checksums.txt
+            tar -xzf gitleaks_8.30.1_linux_x64.tar.gz gitleaks
+          )
+          echo "$scanner_dir" >> "$GITHUB_PATH"
+
       - name: Commit and push changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add podcast/rss.xml
-          git commit -m "Add new episode $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No feed changes to commit"
+            exit 0
+          fi
+          test "$(git diff --cached --name-only)" = "podcast/rss.xml"
+          gitleaks git --pre-commit --redact --staged --verbose
+          git commit -m "Update NBA podcast feed (Eastern edition dates)"
+          gitleaks git --redact --log-opts="origin/${GITHUB_REF_NAME}..HEAD"
           git push
