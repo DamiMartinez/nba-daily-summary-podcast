@@ -73,7 +73,7 @@ class EasternEditionTests(unittest.TestCase):
 
     def test_schedule_uses_madrid_clock_not_a_fixed_utc_hour(self):
         workflow = WORKFLOW.read_text()
-        self.assertIn("cron: '0 11 * * *'", workflow)
+        self.assertIn("cron: '10 11 * * *'", workflow)
         self.assertIn("timezone: 'Europe/Madrid'", workflow)
 
     def test_publication_date_uses_eastern_offset(self):
