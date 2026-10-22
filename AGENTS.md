@@ -29,11 +29,12 @@ Important paths:
 - An Eastern edition dated D recaps Eastern date D-1 and previews Eastern date D.
   Content generation is owned by the producer repository.
 - **`Europe/Madrid` is only the automation scheduling timezone.** Both daily
-  workflows start at **11:00 Madrid time** via native cron `timezone` support.
+  workflows start at **11:10 Madrid time** via native cron `timezone` support.
+  The offset avoids the top-of-hour load peak; it does not guarantee execution.
   Keep that distinct from the Eastern editorial/edition timezone.
 - The publisher waits up to 90 minutes for its matching audio. Its job timeout
   must exceed this wait plus download, validation, scanning, and commit overhead.
-- Scheduled starts can be delayed. Do not promise publication exactly at 11:00.
+- Scheduled starts can be delayed. Do not promise publication exactly at 11:10.
 - Keep explicit `edition_date` backfills consistent across both repositories.
   Freeze the date before waiting; do not change filenames if a wait crosses midnight.
 

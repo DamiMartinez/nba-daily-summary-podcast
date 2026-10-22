@@ -31,13 +31,14 @@ Non-404 HTTP errors and invalid audio fail instead of being treated as missing
 episodes. Temporary downloads are cleaned up, and publisher runs are serialized.
 GitHub Pages then serves the feed. Existing historical RSS items are preserved.
 
-Both workflows start daily at **11:00 AM Europe/Madrid**, using GitHub's native
+Both workflows start daily at **11:10 AM Europe/Madrid**, using GitHub's native
 IANA `timezone` setting to follow Madrid DST. The scheduling timezone is the only
 Madrid-based setting: all episode and game dates/times remain **Eastern**.
 
 The publisher polls for the canonical audio upload for up to **90 minutes** before
 updating RSS. Publication therefore follows successful generation, not exactly
-11:00; GitHub can also delay scheduled starts. A missing upload after the deadline
+11:10; GitHub can also delay scheduled starts. The offset avoids the top-of-hour
+load peak, but scheduled runs remain best-effort. A missing upload after the deadline
 fails visibly. Non-404 HTTP failures do not enter the missing-file wait loop.
 Manual runs accept `edition_date` as an Eastern YYYY-MM-DD date; use the same
 explicit date in both repositories for backfills.
@@ -146,7 +147,7 @@ gh run watch RUN_ID --repo DamiMartinez/nba-daily-summary-podcast --exit-status
 | No feed change on a rerun | The edition may already exist; check its title, GUID, and enclosure URL. |
 | Workflow succeeded, public feed still old | Check the separate `pages-build-deployment` run, allow deployment/cache propagation, then inspect the public RSS. |
 | Spotify artwork/episode still old | Confirm the public feed and assets first; podcast clients refresh on their own schedule. |
-| No scheduled run | Check that the workflow is enabled and the 11:00 `Europe/Madrid` schedule is on the default branch. GitHub can delay starts. |
+| No scheduled run | Check that the workflow is enabled and the 11:10 `Europe/Madrid` schedule is on the default branch. GitHub can delay starts. |
 
 Successful publication means the public feed contains one intended episode with
 the correct audio URL, nonzero enclosure byte size, and iTunes WAV duration.
