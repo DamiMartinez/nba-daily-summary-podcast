@@ -71,10 +71,12 @@ class EasternEditionTests(unittest.TestCase):
         self.assertEqual(namespace["today"], "2026-01-02")
         self.assertTrue(urls[0].endswith("2026-01-02.wav"))
 
-    def test_schedule_uses_madrid_clock_not_a_fixed_utc_hour(self):
+    def test_external_dispatch_is_available_without_builtin_schedule(self):
         workflow = WORKFLOW.read_text()
-        self.assertIn("cron: '10 11 * * *'", workflow)
-        self.assertIn("timezone: 'Europe/Madrid'", workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("edition_date:", workflow)
+        self.assertNotIn("\n  schedule:", workflow)
+        self.assertNotIn("cron:", workflow)
 
     def test_publication_date_uses_eastern_offset(self):
         expression = next(
