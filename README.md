@@ -31,23 +31,29 @@ Non-404 HTTP errors and invalid audio fail instead of being treated as missing
 episodes. Temporary downloads are cleaned up, and publisher runs are serialized.
 GitHub Pages then serves the feed. Existing historical RSS items are preserved.
 
-Both workflows start daily at **11:10 AM Europe/Madrid**, using GitHub's native
-IANA `timezone` setting to follow Madrid DST. The scheduling timezone is the only
-Madrid-based setting: all episode and game dates/times remain **Eastern**.
+## Triggers and external scheduling
 
-The publisher polls for the canonical audio upload for up to **90 minutes** before
-updating RSS. Publication therefore follows successful generation, not exactly
-11:10; GitHub can also delay scheduled starts. The offset avoids the top-of-hour
-load peak, but scheduled runs remain best-effort. A missing upload after the deadline
-fails visibly. Non-404 HTTP failures do not enter the missing-file wait loop.
-Manual runs accept `edition_date` as an Eastern YYYY-MM-DD date; use the same
-explicit date in both repositories for backfills.
+Both production workflows have **no built-in GitHub cron schedule**. An external
+system or an authenticated manual/API `workflow_dispatch` starts them. Scheduling
+and its timezone belong to that external system; all episode/game dates and times
+remain **Eastern**.
 
-Scheduled execution requires both workflows to be enabled in their repositories'
-Actions settings. Scheduled runs use each repository's default branch, so merge
-approved changes before activating a new schedule. Feed commits and outgoing
-changes must pass redacted Gitleaks scans; the pinned scanner download is
-checksum-verified. The publisher uses its automatic `GITHUB_TOKEN` with
+Dispatch generation first, then publication after success. If dispatched together,
+the publisher waits up to **90 minutes** for the canonical audio upload. Missing
+audio after the deadline fails visibly. Non-404 HTTP failures fail immediately.
+Pass the same explicit **Eastern** `edition_date` (YYYY-MM-DD) to both workflows,
+especially for backfills or dispatches that could span midnight.
+
+Workflows must be enabled in Actions for manual/API dispatch to work. Both were
+disabled while removing cron to stop further scheduled executions. Merge the
+schedule-removal PRs before enabling them again; otherwise the old cron on `main`
+would resume. Once removed, enabling them permits dispatch but does not schedule
+any runs. Do not reintroduce `on.schedule` without approval.
+
+The external caller needs authorization to run workflows in both repositories;
+an authenticated GitHub CLI is one option. Feed commits and outgoing changes
+must pass redacted Gitleaks scans; the pinned scanner is checksum-verified. The
+publisher's own feed updates use its automatic `GITHUB_TOKEN` with
 `contents: write`, not a GCP service-account key or cross-repository PAT.
 
 ## Local checks (no network or feed writes)
@@ -147,7 +153,7 @@ gh run watch RUN_ID --repo DamiMartinez/nba-daily-summary-podcast --exit-status
 | No feed change on a rerun | The edition may already exist; check its title, GUID, and enclosure URL. |
 | Workflow succeeded, public feed still old | Check the separate `pages-build-deployment` run, allow deployment/cache propagation, then inspect the public RSS. |
 | Spotify artwork/episode still old | Confirm the public feed and assets first; podcast clients refresh on their own schedule. |
-| No scheduled run | Check that the workflow is enabled and the 11:10 `Europe/Madrid` schedule is on the default branch. GitHub can delay starts. |
+| No run from the external scheduler | Check that the workflow is enabled, the caller has permission to dispatch it, and the repository/ref/date are correct. There is intentionally no GitHub cron fallback. |
 
 Successful publication means the public feed contains one intended episode with
 the correct audio URL, nonzero enclosure byte size, and iTunes WAV duration.

@@ -28,13 +28,15 @@ Important paths:
   date or UTC date to choose an episode. Use `zoneinfo`, not fixed offsets.
 - An Eastern edition dated D recaps Eastern date D-1 and previews Eastern date D.
   Content generation is owned by the producer repository.
-- **`Europe/Madrid` is only the automation scheduling timezone.** Both daily
-  workflows start at **11:10 Madrid time** via native cron `timezone` support.
-  The offset avoids the top-of-hour load peak; it does not guarantee execution.
-  Keep that distinct from the Eastern editorial/edition timezone.
+- Both production workflows are **manual/API dispatch only**. Built-in GitHub
+  cron schedules are intentionally removed; an external system owns scheduling.
+  Do not reintroduce `on.schedule` without explicit approval.
+- Workflows must be enabled for `workflow_dispatch` to work. Disable them only
+  when dispatch should also stop, not as a permanent substitute for removing cron.
 - The publisher waits up to 90 minutes for its matching audio. Its job timeout
   must exceed this wait plus download, validation, scanning, and commit overhead.
-- Scheduled starts can be delayed. Do not promise publication exactly at 11:10.
+- External scheduling does not change the Eastern edition-date contract. The
+  caller should pass the same explicit `edition_date` to both workflows.
 - Keep explicit `edition_date` backfills consistent across both repositories.
   Freeze the date before waiting; do not change filenames if a wait crosses midnight.
 

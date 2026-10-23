@@ -1,11 +1,6 @@
 name: Publish Daily Podcast
 
 on:
-  schedule:
-    # Start with the generator at 11:10 Madrid, away from the top-of-hour peak.
-    # Episode dates/times remain New York time; this zone is only for scheduling.
-    - cron: '10 11 * * *'
-      timezone: 'Europe/Madrid'
   workflow_dispatch:
     inputs:
       edition_date:
@@ -79,8 +74,8 @@ jobs:
 
           # --- Check if today's file exists ---
           print(f"Checking if {audio_url} exists...")
-          # Both workflows start at 11:10 Madrid: wait for the producer instead
-          # of racing its upload or silently skipping today's episode.
+          # An external caller may dispatch both workflows together. Wait for
+          # the producer instead of racing its upload or skipping the episode.
           wait_seconds = int(os.environ.get("AUDIO_WAIT_SECONDS", "5400"))
           if not 0 <= wait_seconds <= 5400:
               raise ValueError("AUDIO_WAIT_SECONDS must be between 0 and 5400")
