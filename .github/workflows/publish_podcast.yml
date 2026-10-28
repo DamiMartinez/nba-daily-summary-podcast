@@ -40,6 +40,7 @@ jobs:
         run: |
           python <<'PYCODE'
           import datetime
+          import hashlib
           import os
           import time
           from email.utils import format_datetime
@@ -63,6 +64,7 @@ jobs:
           print(f"Eastern edition date: {today} (America/New_York)")
           audio_filename = f"nba_daily_summary_podcast_{today}.wav"
           audio_url = f"{bucket_url_prefix}{audio_filename}"
+          metadata_url = audio_url.removesuffix(".wav") + ".metadata.json"
 
           # Podcast metadata
           podcast_name = "NBA Daily Summary"
@@ -92,14 +94,30 @@ jobs:
               time.sleep(min(60, remaining))
           print("✅ File exists, proceeding to update RSS.")
 
+          # Skip published editions before requiring the new metadata sidecar;
+          # historical audio-only episodes must remain safely rerunnable.
+          tree = ET.parse(rss_path)
+          channel = tree.find("channel")
+          existing_items = channel.findall("item")
+          if any(
+              item.findtext("guid") == audio_url
+              or (item.find("enclosure") is not None and item.find("enclosure").get("url") == audio_url)
+              or today in (item.findtext("title") or "")
+              for item in existing_items
+          ):
+              print(f"ℹ️ Episode for {today} already exists, skipping.")
+              sys.exit(0)
+
           # --- Calculate WAV duration in HH:MM:SS ---
           # Bound network reads and remove temporary audio on success or failure.
           import tempfile
+          audio_hash = hashlib.sha256()
           with tempfile.NamedTemporaryFile() as tmpfile:
               with requests.get(audio_url, stream=True, timeout=(5, 60)) as download:
                   download.raise_for_status()
                   for chunk in download.iter_content(chunk_size=1024 * 1024):
                       tmpfile.write(chunk)
+                      audio_hash.update(chunk)
               audio_size = tmpfile.tell()
               tmpfile.flush()
               with contextlib.closing(wave.open(tmpfile.name, 'rb')) as wf:
@@ -115,14 +133,35 @@ jobs:
 
           print(f"Duration of WAV: {duration_str}")
 
+          # Metadata is uploaded last by the producer. Share the audio deadline
+          # so concurrent dispatch cannot publish generic or stale copy.
+          while True:
+              metadata_response = requests.get(metadata_url, timeout=(5, 30))
+              if metadata_response.status_code != 404:
+                  metadata_response.raise_for_status()
+                  break
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise RuntimeError("Episode metadata not available before publication deadline")
+              time.sleep(min(60, remaining))
+          metadata = metadata_response.json()
+          if not isinstance(metadata, dict) or metadata.get("edition_date") != today:
+              raise ValueError("Episode metadata date does not match Eastern edition")
+          if metadata.get("audio_sha256") != audio_hash.hexdigest():
+              raise ValueError("Episode metadata does not match downloaded audio")
+          title = metadata.get("title")
+          description = metadata.get("description")
+          if not isinstance(title, str) or not 20 <= len(title.strip()) <= 110 or "\n" in title or "\r" in title:
+              raise ValueError("Invalid editorial episode title")
+          if not isinstance(description, str) or not 200 <= len(description.strip()) <= 1000:
+              raise ValueError("Invalid editorial episode description")
+          title = title.strip()
+          description = description.strip()
+
           # --- Register namespaces ---
           ET.register_namespace('atom', "http://www.w3.org/2005/Atom")
           ET.register_namespace('itunes', "http://www.itunes.com/dtds/podcast-1.0.dtd")
           ET.register_namespace('dc', "http://purl.org/dc/elements/1.1/")
-
-          # --- Parse RSS ---
-          tree = ET.parse(rss_path)
-          channel = tree.find("channel")
 
           # --- Ensure channel-level tags ---
           if channel.find("author") is None:
@@ -147,23 +186,17 @@ jobs:
               itunes_category = ET.SubElement(channel, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text=podcast_category)
               ET.SubElement(itunes_category, "{http://www.itunes.com/dtds/podcast-1.0.dtd}category", text=podcast_subcategory)
 
-          # --- Avoid duplicates ---
-          existing_titles = [item.findtext("title") for item in channel.findall("item")]
-          if any(today in (t or "") for t in existing_titles):
-              print(f"ℹ️ Episode for {today} already exists, skipping.")
-              sys.exit(0)
-
           # --- Build new item ---
           pub_date = format_datetime(datetime.datetime.now(eastern))
           item = ET.Element("item")
-          ET.SubElement(item, "title").text = f"{podcast_name} — {today}"
-          ET.SubElement(item, "description").text = f"NBA games recap for {today}."
+          ET.SubElement(item, "title").text = f"{title} — {today}"
+          ET.SubElement(item, "description").text = description
           ET.SubElement(item, "pubDate").text = pub_date
           ET.SubElement(item, "guid").text = audio_url
           ET.SubElement(item, "enclosure", url=audio_url, length=str(audio_size), type="audio/wav")
 
           # --- Spotify-specific item tags ---
-          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = f"NBA games recap for {today}"
+          ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}summary").text = description
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}explicit").text = "false"
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}episodeType").text = "full"
           ET.SubElement(item, "{http://www.itunes.com/dtds/podcast-1.0.dtd}duration").text = duration_str

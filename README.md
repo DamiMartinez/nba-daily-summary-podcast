@@ -31,6 +31,30 @@ Non-404 HTTP errors and invalid audio fail instead of being treated as missing
 episodes. Temporary downloads are cleaned up, and publisher runs are serialized.
 GitHub Pages then serves the feed. Existing historical RSS items are preserved.
 
+### Story-led episode metadata
+
+The producer also uploads `nba_daily_summary_podcast_YYYY-MM-DD.metadata.json`
+with `edition_date`, `title`, `description`, and `audio_sha256`. It writes the
+copy after drafting the narration: a searchable player/team-led NBA hook and
+three substantive sentences expanding the lead, teasing secondary stories, and
+previewing the covered schedule. The first 90–250 characters prioritize useful,
+compelling details, following Spotify's [SEO](https://creators.spotify.com/es-ES/resources/podcast-seo)
+and [description](https://creators.spotify.com/es-ES/resources/podcast-episode-descriptions)
+guidance, without unsupported hype or keyword stuffing.
+
+The publisher waits for this sidecar within the same 90-minute deadline, checks
+its Eastern date, WAV SHA-256, and text lengths (title 20–110 characters;
+description 200–1000), then appends the edition date to the story-led title.
+RSS `description` and `itunes:summary` use the same full text. XML escaping is
+handled by ElementTree. GUIDs/enclosures stay tied to the canonical audio URL;
+duplicate checks recognize GUIDs, enclosures, and legacy dated titles.
+
+**Rollout:** merge/deploy the producer's matching metadata change first. Missing,
+invalid, or mismatched metadata fails publication instead of silently reverting
+to generic copy. Audio-only historical backfills need reviewed metadata before
+new publication. This change does not rewrite existing episode titles or
+descriptions, regenerate audio, or publish anything merely by merging.
+
 ## Triggers and external scheduling
 
 Both production workflows have **no built-in GitHub cron schedule**. An external
@@ -39,7 +63,7 @@ and its timezone belong to that external system; all episode/game dates and time
 remain **Eastern**.
 
 Dispatch generation first, then publication after success. If dispatched together,
-the publisher waits up to **90 minutes** for the canonical audio upload. Missing
+the publisher waits up to **90 minutes** for the canonical audio and metadata uploads. Missing
 audio after the deadline fails visibly. Non-404 HTTP failures fail immediately.
 Pass the same explicit **Eastern** `edition_date` (YYYY-MM-DD) to both workflows,
 especially for backfills or dispatches that could span midnight.
